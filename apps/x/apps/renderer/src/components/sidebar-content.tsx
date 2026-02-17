@@ -17,6 +17,7 @@ import {
   Pencil,
   Plug,
   LoaderIcon,
+  PlusCircle,
   Settings,
   Square,
   Trash2,
@@ -99,6 +100,8 @@ interface TreeNode {
 type KnowledgeActions = {
   createNote: (parentPath?: string) => void
   createFolder: (parentPath?: string) => void
+  addVault: () => void
+  unlinkVault: (mountPath: string) => Promise<void>
   openGraph: () => void
   expandAll: () => void
   collapseAll: () => void
@@ -821,6 +824,7 @@ function KnowledgeSection({
   const quickActions = [
     { icon: FilePlus, label: "New Note", action: () => actions.createNote() },
     { icon: FolderPlus, label: "New Folder", action: () => actions.createFolder() },
+    { icon: PlusCircle, label: "Add Knowledge Folder", action: () => actions.addVault() },
     { icon: Network, label: "Graph View", action: () => actions.openGraph() },
   ]
 
@@ -908,6 +912,8 @@ function Tree({
   const isDir = item.kind === 'dir'
   const isExpanded = expandedPaths.has(item.path)
   const isSelected = selectedPath === item.path
+  const [isSymlinkMount, setIsSymlinkMount] = useState(false)
+  const [symlinkChecked, setSymlinkChecked] = useState(false)
   const [isRenaming, setIsRenaming] = useState(false)
   const isSubmittingRef = React.useRef(false)
 
@@ -922,6 +928,20 @@ function Tree({
     setNewName(baseName)
   }, [baseName])
 
+  const ensureSymlinkStatus = async () => {
+    if (symlinkChecked || !isDir) return isSymlinkMount
+    try {
+      const stat = await window.ipc.invoke('workspace:stat', { path: item.path })
+      const isLink = Boolean(stat.isSymlink)
+      setIsSymlinkMount(isLink)
+      setSymlinkChecked(true)
+      return isLink
+    } catch {
+      setSymlinkChecked(true)
+      return false
+    }
+  }
+
   const handleRename = async () => {
     // Prevent double submission
     if (isSubmittingRef.current) return
@@ -930,6 +950,11 @@ function Tree({
     const trimmedName = newName.trim()
     if (trimmedName && trimmedName !== baseName) {
       try {
+        if (await ensureSymlinkStatus()) {
+          toast('Linked folders cannot be renamed here', 'error')
+          setIsRenaming(false)
+          return
+        }
         await actions.rename(item.path, trimmedName, isDir)
         toast('Renamed successfully', 'success')
       } catch (err) {
@@ -944,11 +969,18 @@ function Tree({
   }
 
   const handleDelete = async () => {
+    let isLink = false
     try {
-      await actions.remove(item.path)
-      toast('Moved to trash', 'success')
+      isLink = await ensureSymlinkStatus()
+      if (isLink) {
+        await actions.unlinkVault(item.path)
+        toast('Unlinked knowledge folder', 'success')
+      } else {
+        await actions.remove(item.path)
+        toast('Moved to trash', 'success')
+      }
     } catch (err) {
-      toast('Failed to delete', 'error')
+      toast(isLink ? 'Failed to unlink' : 'Failed to delete', 'error')
     }
   }
 
@@ -986,16 +1018,31 @@ function Tree({
         Copy Path
       </ContextMenuItem>
       <ContextMenuSeparator />
-      <ContextMenuItem onClick={() => { setNewName(baseName); isSubmittingRef.current = false; setIsRenaming(true) }}>
-        <Pencil className="mr-2 size-4" />
-        Rename
-      </ContextMenuItem>
+      {!isSymlinkMount && (
+        <ContextMenuItem onClick={async () => {
+          if (await ensureSymlinkStatus()) {
+            toast('Linked folders cannot be renamed here', 'error')
+            return
+          }
+          setNewName(baseName)
+          isSubmittingRef.current = false
+          setIsRenaming(true)
+        }}>
+          <Pencil className="mr-2 size-4" />
+          Rename
+        </ContextMenuItem>
+      )}
       <ContextMenuItem variant="destructive" onClick={handleDelete}>
         <Trash2 className="mr-2 size-4" />
-        Delete
+        {isSymlinkMount ? 'Unlink Knowledge Folder' : 'Delete'}
       </ContextMenuItem>
     </ContextMenuContent>
   )
+
+  const handleContextMenuOpenChange = (open: boolean) => {
+    if (!open || symlinkChecked || !isDir) return
+    void ensureSymlinkStatus()
+  }
 
   // Inline rename input
   if (isRenaming) {
@@ -1031,7 +1078,7 @@ function Tree({
 
   if (!isDir) {
     return (
-      <ContextMenu>
+      <ContextMenu onOpenChange={handleContextMenuOpenChange}>
         <ContextMenuTrigger asChild>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -1048,7 +1095,7 @@ function Tree({
   }
 
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={handleContextMenuOpenChange}>
       <ContextMenuTrigger asChild>
         <SidebarMenuItem>
           <Collapsible
