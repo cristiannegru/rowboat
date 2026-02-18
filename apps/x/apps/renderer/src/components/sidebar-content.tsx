@@ -8,6 +8,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   Copy,
+  ExternalLink,
   FilePlus,
   FolderPlus,
   AlertTriangle,
@@ -983,6 +984,15 @@ function Tree({
           <ContextMenuSeparator />
         </>
       )}
+      {!isDir && actions.onOpenInNewTab && (
+        <>
+          <ContextMenuItem onClick={() => actions.onOpenInNewTab!(item.path)}>
+            <ExternalLink className="mr-2 size-4" />
+            Open in new tab
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+        </>
+      )}
       <ContextMenuItem onClick={handleCopyPath}>
         <Copy className="mr-2 size-4" />
         Copy Path
@@ -1172,45 +1182,69 @@ function TasksSection({
             </div>
             <SidebarMenu>
               {runs.map((run) => (
-                <SidebarMenuItem key={run.id} className="group/chat-item">
-                  <SidebarMenuButton
-                    isActive={currentRunId === run.id}
-                    onClick={(e) => {
-                      if (e.metaKey && actions?.onOpenInNewTab) {
-                        actions.onOpenInNewTab(run.id)
-                      } else {
-                        actions?.onSelectRun(run.id)
-                      }
-                    }}
-                  >
-                    <div className="flex w-full items-center gap-2 min-w-0">
-                      {processingRunIds?.has(run.id) ? (
-                        <span className="size-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
-                      ) : null}
-                      <span className="min-w-0 flex-1 truncate text-sm">{run.title || '(Untitled chat)'}</span>
-                      {run.createdAt ? (
-                        <span className={`shrink-0 text-[10px] text-muted-foreground${processingRunIds?.has(run.id) ? '' : ' group-hover/chat-item:hidden'}`}>
-                          {formatRunTime(run.createdAt)}
-                        </span>
-                      ) : null}
-                      {!processingRunIds?.has(run.id) && (
-                        <div className="shrink-0 hidden group-hover/chat-item:flex items-center gap-0.5">
-                          <button
-                            type="button"
-                            className="flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setPendingDeleteRunId(run.id)
-                            }}
-                            aria-label="Delete chat"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
+                <ContextMenu key={run.id}>
+                  <ContextMenuTrigger asChild>
+                    <SidebarMenuItem className="group/chat-item">
+                      <SidebarMenuButton
+                        isActive={currentRunId === run.id}
+                        onClick={(e) => {
+                          if (e.metaKey && actions?.onOpenInNewTab) {
+                            actions.onOpenInNewTab(run.id)
+                          } else {
+                            actions?.onSelectRun(run.id)
+                          }
+                        }}
+                      >
+                        <div className="flex w-full items-center gap-2 min-w-0">
+                          {processingRunIds?.has(run.id) ? (
+                            <span className="size-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
+                          ) : null}
+                          <span className="min-w-0 flex-1 truncate text-sm">{run.title || '(Untitled chat)'}</span>
+                          {run.createdAt ? (
+                            <span className={`shrink-0 text-[10px] text-muted-foreground${processingRunIds?.has(run.id) ? '' : ' group-hover/chat-item:hidden'}`}>
+                              {formatRunTime(run.createdAt)}
+                            </span>
+                          ) : null}
+                          {!processingRunIds?.has(run.id) && (
+                            <div className="shrink-0 hidden group-hover/chat-item:flex items-center gap-0.5">
+                              <button
+                                type="button"
+                                className="flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setPendingDeleteRunId(run.id)
+                                }}
+                                aria-label="Delete chat"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent className="w-48">
+                    {actions?.onOpenInNewTab && (
+                      <ContextMenuItem onClick={() => actions.onOpenInNewTab!(run.id)}>
+                        <ExternalLink className="mr-2 size-4" />
+                        Open in new tab
+                      </ContextMenuItem>
+                    )}
+                    {!processingRunIds?.has(run.id) && (
+                      <>
+                        {actions?.onOpenInNewTab && <ContextMenuSeparator />}
+                        <ContextMenuItem
+                          variant="destructive"
+                          onClick={() => setPendingDeleteRunId(run.id)}
+                        >
+                          <Trash2 className="mr-2 size-4" />
+                          Delete
+                        </ContextMenuItem>
+                      </>
+                    )}
+                  </ContextMenuContent>
+                </ContextMenu>
               ))}
             </SidebarMenu>
           </>
